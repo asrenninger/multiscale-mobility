@@ -1,0 +1,483 @@
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+let animationId = null;
+
+// Set canvas size
+function resizeCanvas() {
+  const container = canvas.parentElement;
+  canvas.width = container.clientWidth;
+  canvas.height = container.clientHeight;
+}
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+// Adaptive configuration based on screen size
+function getAdaptiveConfig() {
+  const isMobile = window.innerWidth <= 768;
+  const isSmall = window.innerWidth <= 480;
+  
+  return {
+    numLevels: isSmall ? 3 : isMobile ? 4 : 5,
+    levelSpacing: isSmall ? 80 : isMobile ? 90 : 100,
+    planeSize: isSmall ? 250 : isMobile ? 300 : 400,
+    totalParticles: isSmall ? 60 : isMobile ? 80 : 120,
+    nodesPerLevel: isSmall ? 5 : isMobile ? 6 : 8,
+    cameraDistance: isSmall ? 600 : isMobile ? 700 : 800,
+    showGrid: !isMobile
+  };
+}
+
+let config = getAdaptiveConfig();
+let numLevels = config.numLevels;
+let levelSpacing = config.levelSpacing;
+let planeSize = config.planeSize;
+let totalTransitions = 0;
+
+// Camera system
+const camera = {
+  get distance() {
+    return getAdaptiveConfig().cameraDistance;
+  },
+  
+  project(x, y, z) {
+    const angleZ = -0.45;
+    const rotX1 = x * Math.cos(angleZ) - y * Math.sin(angleZ);
+    const rotY1 = x * Math.sin(angleZ) + y * Math.cos(angleZ);
+    
+    const angleY = 0;
+    const rotX2 = rotX1 * Math.cos(angleY) + z * Math.sin(angleY);
+    const rotZ2 = -rotX1 * Math.sin(angleY) + z * Math.cos(angleY);
+    
+    const angleX = -0.90;
+    const rotY3 = rotY1 * Math.cos(angleX) - rotZ2 * Math.sin(angleX);
+    const rotZ3 = rotY1 * Math.sin(angleX) + rotZ2 * Math.cos(angleX);
+    
+    const scale = this.distance / (this.distance + rotZ3);
+    const screenX = rotX2 * scale * 1.2 + canvas.width / 2;
+    const screenY = rotY3 * scale * 1.2 + canvas.height * 0.7;
+    
+    return { x: screenX, y: screenY, scale, depth: rotZ3 };
+  }
+};
+
+const PHYSICS_CONFIG = {
+  nodeConnectionRange: 100,
+  particleConnectionRange: 80,
+  capitalGainRate: 0.2,
+  capitalLossOnTransition: 0.7,
+  lowCapitalThreshold: 2.5,
+  highCapitalThreshold: 4.5,
+  crossLevelCapitalRequired: 2.5,
+  downwardMobilityChance: 0.006,
+  upwardMobilityChance: 0.005,
+  crossLevelMobilityChance: 0.003,
+  framesBeforeTransition: 30,
+  particleSpeed: 0.25,
+  particleDamping: 0.88,
+  attractionForce: 0.010,
+};
+
+class Node {
+  constructor(level) {
+    this.level = level;
+    this.x = (Math.random() - 0.5) * planeSize * 0.6;
+    this.y = (Math.random() - 0.5) * planeSize * 0.6;
+    this.z = -level * levelSpacing;
+    this.vx = (Math.random() - 0.5) * 0.3;
+    this.vy = (Math.random() - 0.5) * 0.3;
+    this.baseSpeed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
+    this.mass = Math.random() * 2 + 1.5;
+    this.radius = 4;
+    this.strength = Math.random() * 0.5 + 0.5;
+  }
+
+  update(nodes) {
+    const sameLevel = nodes.filter(n => n.level === this.level && n !== this);
+    
+    let fx = 0, fy = 0;
+    
+    sameLevel.forEach(other => {
+      const dx = other.x - this.x;
+      const dy = other.y - this.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      
+      if (dist > 0 && dist < 180) {
+        const force = dist < 50 
+          ? -(0.08 * this.mass * other.mass) / (dist * dist + 1)
+          : (0.04 * this.mass * other.mass) / (dist * dist);
+        const angle = Math.atan2(dy, dx);
+        fx += Math.cos(angle) * force;
+        fy += Math.sin(angle) * force;
+      }
+    });
+
+    this.vx += fx / this.mass;
+    this.vy += fy / this.mass;
+
+    const speed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
+    if (speed > 0) {
+      const factor = this.baseSpeed / speed;
+      this.vx *= factor * 0.98;
+      this.vy *= factor * 0.98;
+    }
+
+    this.x += this.vx;
+    this.y += this.vy;
+
+    const boundary = planeSize * 0.35;
+    if (Math.abs(this.x) > boundary) {
+      this.vx *= -0.9;
+      this.x = Math.sign(this.x) * boundary;
+    }
+    if (Math.abs(this.y) > boundary) {
+      this.vy *= -0.9;
+      this.y = Math.sign(this.y) * boundary;
+    }
+  }
+
+  draw(ctx, camera) {
+    const proj = camera.project(this.x, this.y, this.z);
+    
+    if (proj.scale <= 0) return;
+    
+    const depthAlpha = Math.max(0.3, Math.min(1, 1 - proj.depth / 1000));
+    
+    const gradient = ctx.createRadialGradient(proj.x, proj.y, 0, proj.x, proj.y, this.radius * proj.scale * 2);
+    gradient.addColorStop(0, `rgba(255, 255, 255, ${depthAlpha * 0.9})`);
+    gradient.addColorStop(0.5, `rgba(255, 255, 255, ${depthAlpha * 0.4})`);
+    gradient.addColorStop(1, `rgba(255, 255, 255, 0)`);
+    
+    ctx.beginPath();
+    ctx.arc(proj.x, proj.y, this.radius * proj.scale * 2, 0, Math.PI * 2);
+    ctx.fillStyle = gradient;
+    ctx.fill();
+    
+    ctx.beginPath();
+    ctx.arc(proj.x, proj.y, this.radius * proj.scale, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(255, 255, 255, ${depthAlpha})`;
+    ctx.fill();
+  }
+}
+
+class Particle {
+  constructor(level) {
+    this.level = level;
+    this.targetLevel = level;
+    this.x = (Math.random() - 0.5) * planeSize * 0.5;
+    this.y = (Math.random() - 0.5) * planeSize * 0.5;
+    this.z = -level * levelSpacing;
+    this.targetZ = this.z;
+    this.vx = (Math.random() - 0.5) * PHYSICS_CONFIG.particleSpeed;
+    this.vy = (Math.random() - 0.5) * PHYSICS_CONFIG.particleSpeed;
+    this.mass = 1;
+    this.radius = 2.5;
+    this.connections = new Map();
+    this.transitionProgress = 0;
+    this.inTransition = false;
+    this.mobilityPotential = Math.random();
+    this.socialCapital = 3;
+    this.prevConnectionCount = 0;
+    this.capitalHistory = [3, 3, 3];
+    this.stagnantFrames = 0;
+  }
+
+  findConnections(nodes, particles) {
+    const prevCount = this.connections.size;
+    this.connections.clear();
+    
+    nodes.forEach(node => {
+      const dx = node.x - this.x;
+      const dy = node.y - this.y;
+      const dz = node.z - this.z;
+      const dist3d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      
+      if (dist3d < PHYSICS_CONFIG.nodeConnectionRange) {
+        this.connections.set(node, { 
+          dx, dy, dz, 
+          dist: dist3d, 
+          type: 'node',
+          strength: node.strength 
+        });
+      }
+    });
+
+    particles.forEach(other => {
+      if (other !== this) {
+        const dx = other.x - this.x;
+        const dy = other.y - this.y;
+        const dz = other.z - this.z;
+        const dist3d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        
+        if (dist3d < PHYSICS_CONFIG.particleConnectionRange) {
+          this.connections.set(other, { 
+            dx, dy, dz, 
+            dist: dist3d, 
+            type: 'particle' 
+          });
+        }
+      }
+    });
+
+    const currentCount = this.connections.size;
+    const delta = currentCount - prevCount;
+    
+    this.socialCapital += delta * PHYSICS_CONFIG.capitalGainRate;
+    this.socialCapital = Math.max(0, Math.min(10, this.socialCapital));
+    
+    this.capitalHistory.push(this.socialCapital);
+    if (this.capitalHistory.length > 10) this.capitalHistory.shift();
+    
+    this.prevConnectionCount = currentCount;
+  }
+
+  update(nodes) {
+    this.stagnantFrames++;
+    
+    const capitalTrend = this.capitalHistory.length > 3 
+      ? this.socialCapital - this.capitalHistory[0]
+      : 0;
+    
+    if (!this.inTransition && this.stagnantFrames > PHYSICS_CONFIG.framesBeforeTransition) {
+      
+      if (this.socialCapital < PHYSICS_CONFIG.lowCapitalThreshold && this.level > 0) {
+        const downwardChance = PHYSICS_CONFIG.downwardMobilityChance * 
+          (PHYSICS_CONFIG.lowCapitalThreshold - this.socialCapital);
+        if (Math.random() < downwardChance) {
+          this.targetLevel = this.level - 1;
+          this.targetZ = -this.targetLevel * levelSpacing;
+          this.inTransition = true;
+          this.transitionProgress = 0;
+          this.stagnantFrames = 0;
+          totalTransitions++;
+        }
+      }
+      
+      if (this.socialCapital > PHYSICS_CONFIG.highCapitalThreshold && this.level < numLevels - 1) {
+        const upwardChance = PHYSICS_CONFIG.upwardMobilityChance * 
+          (this.socialCapital - PHYSICS_CONFIG.highCapitalThreshold) * this.mobilityPotential;
+        if (Math.random() < upwardChance) {
+          this.targetLevel = this.level + 1;
+          this.targetZ = -this.targetLevel * levelSpacing;
+          this.inTransition = true;
+          this.transitionProgress = 0;
+          this.stagnantFrames = 0;
+          totalTransitions++;
+        }
+      }
+      
+      const crossLevelConnections = Array.from(this.connections.entries())
+        .filter(([entity, data]) => {
+          const levelDiff = Math.abs(data.dz) / levelSpacing;
+          return levelDiff > 0.8 && levelDiff < 1.2;
+        });
+      
+      if (crossLevelConnections.length > 0 && 
+          this.socialCapital > PHYSICS_CONFIG.crossLevelCapitalRequired) {
+        const mobilityChance = PHYSICS_CONFIG.crossLevelMobilityChance * 
+          this.socialCapital * this.mobilityPotential;
+        
+        if (Math.random() < mobilityChance) {
+          const [targetEntity] = crossLevelConnections[
+            Math.floor(Math.random() * crossLevelConnections.length)
+          ];
+          this.targetZ = targetEntity.z;
+          this.targetLevel = Math.round(-this.targetZ / levelSpacing);
+          this.inTransition = true;
+          this.transitionProgress = 0;
+          this.stagnantFrames = 0;
+          totalTransitions++;
+        }
+      }
+    }
+
+    if (this.inTransition) {
+      this.transitionProgress += 0.008;
+      const easeProgress = 0.5 - Math.cos(this.transitionProgress * Math.PI) / 2;
+      this.z = this.z + (this.targetZ - this.z) * easeProgress * 0.05;
+      
+      if (this.transitionProgress >= 1) {
+        this.z = this.targetZ;
+        this.level = this.targetLevel;
+        this.inTransition = false;
+        this.socialCapital *= PHYSICS_CONFIG.capitalLossOnTransition;
+      }
+    }
+
+    let fx = 0, fy = 0;
+    
+    this.connections.forEach((data, entity) => {
+      if (Math.abs(data.dz) < levelSpacing * 0.5) {
+        const force = (PHYSICS_CONFIG.attractionForce * this.mass) / (data.dist * data.dist + 1);
+        const angle = Math.atan2(data.dy, data.dx);
+        fx += Math.cos(angle) * force;
+        fy += Math.sin(angle) * force;
+      }
+    });
+
+    fx += (Math.random() - 0.5) * 0.01;
+    fy += (Math.random() - 0.5) * 0.01;
+
+    this.vx += fx;
+    this.vy += fy;
+
+    this.vx *= PHYSICS_CONFIG.particleDamping;
+    this.vy *= PHYSICS_CONFIG.particleDamping;
+
+    this.x += this.vx;
+    this.y += this.vy;
+
+    const boundary = planeSize * 0.4;
+    if (Math.abs(this.x) > boundary) {
+      this.vx *= -0.6;
+      this.x = Math.sign(this.x) * boundary;
+    }
+    if (Math.abs(this.y) > boundary) {
+      this.vy *= -0.6;
+      this.y = Math.sign(this.y) * boundary;
+    }
+  }
+
+  draw(ctx, camera) {
+    const proj = camera.project(this.x, this.y, this.z);
+    
+    if (proj.scale <= 0) return;
+    
+    const depthAlpha = Math.max(0.3, Math.min(1, 1 - proj.depth / 1000));
+    
+    this.connections.forEach((data, entity) => {
+      const entityProj = camera.project(entity.x, entity.y, entity.z);
+      
+      if (entityProj.scale <= 0) return;
+      
+      const isVertical = Math.abs(data.dz) > levelSpacing * 0.3;
+      const distAlpha = Math.max(0, 1 - data.dist / 
+        Math.max(PHYSICS_CONFIG.nodeConnectionRange, PHYSICS_CONFIG.particleConnectionRange)) 
+        * depthAlpha;
+      
+      ctx.beginPath();
+      ctx.moveTo(proj.x, proj.y);
+      ctx.lineTo(entityProj.x, entityProj.y);
+      
+      if (isVertical) {
+        ctx.strokeStyle = `rgba(100, 200, 255, ${distAlpha * 0.25})`;
+        ctx.lineWidth = this.inTransition ? 1.5 : 0.8;
+      } else {
+        ctx.strokeStyle = `rgba(255, 255, 255, ${distAlpha * 0.08})`;
+        ctx.lineWidth = 0.4;
+      }
+      ctx.stroke();
+    });
+
+    const levelHue = (this.level / numLevels) * 60 + 180;
+    
+    const capitalSize = 1 + (this.socialCapital / 10) * 0.5;
+    const brightness = 50 + (this.socialCapital / 10) * 30;
+    const size = this.radius * capitalSize * (this.inTransition ? 1.3 : 1);
+    
+    if (this.socialCapital > 6 || this.inTransition) {
+      const glowRadius = size * proj.scale * 2.5;
+      const glowStrength = this.inTransition ? 0.5 : (this.socialCapital - 6) / 4 * 0.3;
+      const gradient = ctx.createRadialGradient(proj.x, proj.y, 0, proj.x, proj.y, glowRadius);
+      gradient.addColorStop(0, `hsla(${levelHue}, 100%, ${brightness}%, ${depthAlpha * glowStrength})`);
+      gradient.addColorStop(1, `hsla(${levelHue}, 100%, ${brightness}%, 0)`);
+      
+      ctx.beginPath();
+      ctx.arc(proj.x, proj.y, glowRadius, 0, Math.PI * 2);
+      ctx.fillStyle = gradient;
+      ctx.fill();
+    }
+    
+    ctx.beginPath();
+    ctx.arc(proj.x, proj.y, size * proj.scale, 0, Math.PI * 2);
+    const alpha = depthAlpha * (0.6 + this.socialCapital / 10 * 0.4);
+    ctx.fillStyle = `hsla(${levelHue}, 100%, ${brightness}%, ${alpha})`;
+    ctx.fill();
+    
+    if (this.socialCapital < PHYSICS_CONFIG.lowCapitalThreshold && !this.inTransition) {
+      ctx.beginPath();
+      ctx.arc(proj.x, proj.y, size * proj.scale + 2, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(255, 100, 100, ${depthAlpha * 0.3})`;
+      ctx.lineWidth = 0.5;
+      ctx.stroke();
+    }
+  }
+}
+
+// Initialize nodes and particles
+let nodes = [];
+let particles = [];
+
+function initializeSimulation() {
+  config = getAdaptiveConfig();
+  numLevels = config.numLevels;
+  levelSpacing = config.levelSpacing;
+  planeSize = config.planeSize;
+  
+  nodes = [];
+  for (let level = 0; level < numLevels; level++) {
+    const numNodes = config.nodesPerLevel + Math.floor(Math.random() * 3);
+    for (let i = 0; i < numNodes; i++) {
+      nodes.push(new Node(level));
+    }
+  }
+
+  particles = [];
+  const totalParticles = config.totalParticles;
+  const particlesPerLevel = Math.floor(totalParticles / numLevels);
+  
+  for (let level = 0; level < numLevels; level++) {
+    for (let i = 0; i < particlesPerLevel; i++) {
+      particles.push(new Particle(level));
+    }
+  }
+  for (let i = 0; i < totalParticles - (particlesPerLevel * numLevels); i++) {
+    const bias = Math.random() * Math.random();
+    const level = Math.floor(bias * numLevels);
+    particles.push(new Particle(level));
+  }
+}
+
+initializeSimulation();
+
+// Handle window resize
+let resizeTimeout;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimeout);
+  resizeTimeout = setTimeout(() => {
+    const newConfig = getAdaptiveConfig();
+    if (newConfig.numLevels !== config.numLevels || 
+        newConfig.totalParticles !== config.totalParticles) {
+      initializeSimulation();
+    }
+  }, 250);
+});
+
+let frameCount = 0;
+
+// Animation loop
+function animate() {
+  ctx.fillStyle = 'rgba(10, 10, 15, 0.15)';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Update entities
+  nodes.forEach(node => node.update(nodes));
+  particles.forEach(p => {
+    p.findConnections(nodes, particles);
+    p.update(nodes);
+  });
+
+  // Draw from back to front
+  const allEntities = [
+    ...particles.map(p => ({ entity: p, depth: p.z })),
+    ...nodes.map(n => ({ entity: n, depth: n.z }))
+  ].sort((a, b) => a.depth - b.depth);
+
+  allEntities.forEach(({ entity }) => {
+    entity.draw(ctx, camera);
+  });
+
+  animationId = requestAnimationFrame(animate);
+}
+
+// Start animation
+animate();
