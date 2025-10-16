@@ -134,6 +134,16 @@ body {
   color: #fff;
 }
 
+.other-image {
+  width: 500px;
+  height: 500px;
+  object-fit: shrink;
+  margin-bottom: 1rem;
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+}
+
 h3 a,
 h3 a:link,
 h3 a:visited,
@@ -177,7 +187,15 @@ h3 a:active {
   .description-content {
     max-width: 100%;
   }
+
+  .image-section {
+    padding: 10px 10px;
+  }
   
+  .image-content {
+    max-width: 90%;
+  }
+
   /* Stack organisers on mobile */
   .organisers-grid {
     grid-template-columns: 1fr;
