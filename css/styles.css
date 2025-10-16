@@ -134,6 +134,16 @@ body {
   color: #fff;
 }
 
+h3 a,
+h3 a:link,
+h3 a:visited,
+h3 a:hover,
+h3 a:active {
+  text-decoration: none !important;
+  border-bottom: 0 !important;  /* in case underline is a border */
+  color: inherit !important;
+}
+
 @media (max-width: 768px) {
   body {
     scroll-snap-type: y mandatory;
