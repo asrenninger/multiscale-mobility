@@ -1,4 +1,13 @@
 # multiscale-mobility
-a netsci-x special session on scales and dimensions of human mobility
 
-![](https://github.com/asrenninger/multiscale-mobility/blob/657305b7da0b765495c0607b8a8f2d82229a309b/images/mobility.gif)
+**Multiscale Mobilities** — a half-day colloquium on daily mobility and spatial
+inequality in European cities.
+
+📍 EPFL, Lausanne (room GC B1 10) · 🗓️ 11 September 2026
+
+Hosted at [EPFL](https://www.epfl.ch/labs/urbes/), Lausanne (Laboratory of Urban and
+Environmental Systems). Organised by Olena Holubowska (University of Neuchâtel), Andrew
+Renninger (Central European University), Marc Duran-Sala (EPFL) and Gabriele Manoli (EPFL).
+
+Static site (HTML/CSS/vanilla-JS canvas) served via GitHub Pages.
+The previous NetSci-X Auckland session site is archived in `legacy-site.zip` (gitignored).
