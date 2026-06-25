@@ -11,6 +11,9 @@ _src_photos/
 images/headshot_cropped.png
 images/PHOTO-2025-10-15-23-00-33.jpg
 
+# Animation experiments (social-media GIF drafts) — scratch until one is chosen
+_anim/
+
 # Claude Code / local tooling (preview config, local settings)
 .claude/
 
