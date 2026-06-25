@@ -1,6 +1,6 @@
 # multiscale-mobility
 
-**Multiscale Mobilities** — a half-day colloquium on daily mobility and spatial
+**Multiscale Mobilities** — a colloquium on daily mobility and spatial
 inequality in European cities.
 
 📍 EPFL, Lausanne (room GC B1 10) · 🗓️ 11 September 2026
@@ -8,6 +8,3 @@ inequality in European cities.
 Hosted at [EPFL](https://www.epfl.ch/labs/urbes/), Lausanne (Laboratory of Urban and
 Environmental Systems). Organised by Olena Holubowska (University of Neuchâtel), Andrew
 Renninger (Central European University), Marc Duran-Sala (EPFL) and Gabriele Manoli (EPFL).
-
-Static site (HTML/CSS/vanilla-JS canvas) served via GitHub Pages.
-The previous NetSci-X Auckland session site is archived in `legacy-site.zip` (gitignored).
