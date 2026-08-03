@@ -14,6 +14,13 @@ images/PHOTO-2025-10-15-23-00-33.jpg
 # Animation experiments (social-media GIF drafts) — scratch until one is chosen
 _anim/
 
+# Inequality post series (simulation scripts + rendered frames) — scratch, not served
+_series/
+
+# Python build cruft
+__pycache__/
+*.pyc
+
 # Claude Code / local tooling (preview config, local settings)
 .claude/
 
