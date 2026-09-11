@@ -736,9 +736,15 @@ function loadImgs(){
     var url='figs/'+want;
     if((img.getAttribute('src')||'').split('?')[0]!==url){
       img.onerror=function(){ flagMissing(img,want); };
+      img.onload=function(){ clearMissing(img); };
       img.setAttribute('src',url);
     }
   });
+}
+function clearMissing(img){
+  var p=img.parentNode, box=p&&p.querySelector('.missing');
+  if(box) p.removeChild(box);
+  img.style.display='';
 }
 function flagMissing(img,f){
   var p=img.parentNode;
